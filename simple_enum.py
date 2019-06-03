@@ -17,6 +17,11 @@ class Enumerate(object):
             logging.debug(f"{self.target_dir} does not exist. Creating...")
             self.target_dir.mkdir()
 
+    def _check_for_subdomains(self):
+        with open(self.amass_out, 'r') as amass_out:
+            contents = amass_out.read()
+            return contents.strip()
+
     def _setup(self, domain):
         self.target_dir = Path(f"{self.root_dir}/{domain}").resolve()
         self.amass_out = Path(f"{self.target_dir}/amass.out").resolve()
@@ -35,7 +40,7 @@ class Enumerate(object):
         for domain in self.domains:
             logging.info(f"Running subdomain enumeration against:\t{domain}")
             self._setup(domain)
-            cmd = f"amass -d {domain} -r 1.1.1.1,8.8.8.8 -o {self.amass_out}"
+            cmd = f"amass enum -d {domain} -r 1.1.1.1,8.8.8.8 -o {self.amass_out}"
             try:
                 p = subprocess.run(cmd, check=True, shell=True, capture_output=True)
             except subprocess.CalledProcessError:
@@ -46,15 +51,18 @@ class Enumerate(object):
     def capture(self, args):
         self._process_args(args)
         for domain in self.domains:
-            logging.info(f"Running screenshot capture against:\t{domain}")
             self._setup(domain)
-            cmd = f"cat {self.amass_out} | aquatone -scan-timeout 500 -ports large -out {self.aquatone_out}"
-            try:
-                p = subprocess.run(cmd, check=True, shell=True, capture_output=True)
-            except subprocess.CalledProcessError:
-                logging.error('Aquatone returned non-zero return code.', exc_info=True)
-                logging.debug(f"Command run: {cmd} - Output: {p.stdout} | {p.stderr}")
-            logging.info(f"Finished capturing. You can view results at: {self.aquatone_out}/aquatone_report.html")
+            logging.info(f"Running screenshot capture against:\t{domain}")
+            if self._check_for_subdomains():
+                cmd = f"cat {self.amass_out} | aquatone -scan-timeout 500 -ports large -out {self.aquatone_out}"
+                try:
+                    p = subprocess.run(cmd, check=True, shell=True, capture_output=True)
+                except subprocess.CalledProcessError:
+                    logging.error('Aquatone returned non-zero return code.', exc_info=True)
+                    logging.debug(f"Command run: {cmd} - Output: {p.stdout} | {p.stderr}")
+                logging.info(f"Finished capturing. You can view results at: {self.aquatone_out}/aquatone_report.html")
+            else:
+                logging.warning('No subdomains found. Skipping screenshotting...')
 
     def scan(self, args):
         self.enumerate(args)
